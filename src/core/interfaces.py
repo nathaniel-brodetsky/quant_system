@@ -3,10 +3,12 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any
 
+
 class DataLoader(ABC):
     @abstractmethod
     def fetch_historical(self, symbol: str, start: str, end: str) -> pd.DataFrame:
         pass
+
 
 class FeatureEngine(ABC):
     @abstractmethod
@@ -17,6 +19,7 @@ class FeatureEngine(ABC):
     def update_online(self, new_data: Dict[str, Any]) -> np.ndarray:
         pass
 
+
 class KoopmanModel(ABC):
     @abstractmethod
     def fit(self, X: np.ndarray, Y: np.ndarray) -> None:
@@ -25,6 +28,7 @@ class KoopmanModel(ABC):
     @abstractmethod
     def predict(self, x_t: np.ndarray, steps: int = 1) -> np.ndarray:
         pass
+
 
 class TDARegimeDetector(ABC):
     @abstractmethod
