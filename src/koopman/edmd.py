@@ -7,6 +7,7 @@ from typing import Optional
 
 class EDMDKoopmanModel(KoopmanModel):
 
+
     def __init__(self, polynomial_degree: int = 2):
         self.polynomial_degree = polynomial_degree
 
@@ -23,12 +24,12 @@ class EDMDKoopmanModel(KoopmanModel):
         if not self.is_fitted:
             raise ValueError("Модель Купмана еще не обучена. Вызовите fit().")
 
-        if x_t.ndim == 1:
-            x_t = x_t.reshape(1, -1)
+        if x_t.ndim == 2:
+            x_t = x_t.flatten()
 
         trajectory = self.model.simulate(x_t, n_steps=steps)
-        return trajectory[-1]
 
+        return trajectory[-1]
     def get_eigenvalues(self) -> np.ndarray:
         if not self.is_fitted:
             raise ValueError("Модель Купмана еще не обучена.")

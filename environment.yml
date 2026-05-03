@@ -1,0 +1,19 @@
+name: quant_system
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - scipy
+  - pandas
+  - scikit-learn
+  - numba
+  - jupyter
+  - pip
+  - pip:
+      - pykoopman
+      - giotto-tda
+      - ruff
+      - mypy
+      - pytest

@@ -1,14 +1,12 @@
 from abc import ABC, abstractmethod
 import pandas as pd
 import numpy as np
-from typing import Dict, Any
-
+from typing import Dict, Any, Callable
 
 class DataLoader(ABC):
     @abstractmethod
     def fetch_historical(self, symbol: str, start: str, end: str) -> pd.DataFrame:
         pass
-
 
 class FeatureEngine(ABC):
     @abstractmethod
@@ -19,7 +17,6 @@ class FeatureEngine(ABC):
     def update_online(self, new_data: Dict[str, Any]) -> np.ndarray:
         pass
 
-
 class KoopmanModel(ABC):
     @abstractmethod
     def fit(self, X: np.ndarray, Y: np.ndarray) -> None:
@@ -29,7 +26,6 @@ class KoopmanModel(ABC):
     def predict(self, x_t: np.ndarray, steps: int = 1) -> np.ndarray:
         pass
 
-
 class TDARegimeDetector(ABC):
     @abstractmethod
     def fit_transform(self, X: np.ndarray) -> np.ndarray:
@@ -37,4 +33,14 @@ class TDARegimeDetector(ABC):
 
     @abstractmethod
     def detect_regime(self, current_topology: np.ndarray) -> int:
+        pass
+
+class AlphaEngine(ABC):
+    @abstractmethod
+    def evaluate_and_evolve(self, features: np.ndarray, returns: np.ndarray) -> None:
+        pass
+
+class StrategyEvaluator(ABC):
+    @abstractmethod
+    def walk_forward_eval(self, data: pd.DataFrame, alpha_logic: Callable) -> pd.DataFrame:
         pass

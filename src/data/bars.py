@@ -6,12 +6,16 @@ def create_volume_bars(ticks: pd.DataFrame, volume_threshold: float) -> pd.DataF
     if ticks.empty:
         return pd.DataFrame()
 
-    ticks['cum_vol'] = ticks['volume'].cumsum()
+    df = ticks.copy()
 
-    ticks['bar_id'] = (ticks['cum_vol'] // volume_threshold).astype(int)
+    df['timestamp'] = df.index
 
-    bars = ticks.groupby('bar_id').agg(
-        timestamp=('index', 'last'),
+    df['cum_vol'] = df['volume'].cumsum()
+
+    df['bar_id'] = (df['cum_vol'] // volume_threshold).astype(int)
+
+    bars = df.groupby('bar_id').agg(
+        timestamp=('timestamp', 'last'),
         open=('price', 'first'),
         high=('price', 'max'),
         low=('price', 'min'),
