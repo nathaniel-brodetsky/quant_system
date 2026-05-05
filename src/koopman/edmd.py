@@ -1,45 +1,45 @@
 import numpy as np
 import pykoopman as pk
-from pykoopman.observables import Polynomial
+from pykoopman.observables import TimeDelay
+
 from src.core.interfaces import KoopmanModel
-from typing import Optional
 
 
 class EDMDKoopmanModel(KoopmanModel):
+    def __init__(self, delay_shifts: int = 3, rbf_centers: int = 10):
+        self.delay_shifts = delay_shifts
+        self.rbf_centers = rbf_centers
 
-
-    def __init__(self, polynomial_degree: int = 2):
-        self.polynomial_degree = polynomial_degree
-
-        self.observables = Polynomial(degree=self.polynomial_degree)
-
-        self.model = pk.Koopman(observables=self.observables)
+        self.delay_obs = TimeDelay(delay=1, n_delays=self.delay_shifts)
+        self.observables = self.delay_obs
+        self.regressor = pk.regression.EDMD(svd_rank=0.95)
+        self.model = pk.Koopman(observables=self.observables, regressor=self.regressor)
         self.is_fitted = False
+        self._horizon = 1
 
-    def fit(self, X: np.ndarray, Y: np.ndarray) -> None:
-        self.model.fit(x=X, y=Y)
+    def fit(self, X: np.ndarray, Y: np.ndarray, horizon: int = 1) -> None:
+        X_train = X[::horizon] if horizon > 1 else X
+        self.model.fit(X_train)
+        self._horizon = horizon
         self.is_fitted = True
 
-    def predict(self, x_t: np.ndarray, steps: int = 1) -> np.ndarray:
-        if not self.is_fitted:
-            raise ValueError("Модель Купмана еще не обучена. Вызовите fit().")
-
-        if x_t.ndim == 2:
-            x_t = x_t.flatten()
-
-        trajectory = self.model.simulate(x_t, n_steps=steps)
-
-        return trajectory[-1]
-    def get_eigenvalues(self) -> np.ndarray:
+    def predict(self, x_trajectory: np.ndarray, steps: int = 1) -> np.ndarray:
         if not self.is_fitted:
             raise ValueError("Модель Купмана еще не обучена.")
 
+        if x_trajectory.ndim == 1:
+            x_trajectory = x_trajectory.reshape(1, -1)
+
+        try:
+            trajectory = self.model.simulate(x_trajectory[0], n_steps=steps)
+            return trajectory[-1]
+        except Exception:
+            flat_x = x_trajectory.flatten()
+            trajectory = self.model.simulate(flat_x, n_steps=steps)
+            return trajectory[-1]
+
+    def get_eigenvalues(self) -> np.ndarray:
+        if not self.is_fitted:
+            return np.array([])
         K = self.model.koopman_matrix
-
-        eigenvalues = np.linalg.eigvals(K)
-        return eigenvalues
-
-    def get_instability_index(self) -> float:
-        evals = self.get_eigenvalues()
-        max_modulus = np.max(np.abs(evals))
-        return float(max_modulus)
+        return np.linalg.eigvals(K)
