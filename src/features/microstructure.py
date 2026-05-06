@@ -13,11 +13,15 @@ class MicrostructureEngine(FeatureEngine):
     def fit_transform(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
 
+        # 1. Log Returns
         df["log_ret"] = np.log(df["close"] / df["close"].shift(1))
 
         df["dp"] = df["close"].diff()
         cov = df["dp"].rolling(window=self.window).cov(df["dp"].shift(1))
-        df["roll_measure"] = 2 * np.sqrt(np.clip(-cov, 0, None))
+        roll_raw = 2 * np.sqrt(np.clip(-cov, 0, None))
+        hl_spread = (df["high"] - df["low"]) / df["close"]
+        hl_spread_smooth = hl_spread.rolling(window=self.window).mean()
+        df["roll_measure"] = np.where(roll_raw > 0, roll_raw, hl_spread_smooth)
 
         if "taker_buy_base_vol" in df.columns:
             df["market_sell_vol"] = df["volume"] - df["taker_buy_base_vol"]
@@ -34,6 +38,15 @@ class MicrostructureEngine(FeatureEngine):
         df["parkinson_vol"] = np.sqrt(
             const * hl_log_sq.rolling(window=self.window).mean()
         )
+
+        df["momentum_5"] = df["log_ret"].rolling(5).sum()
+        df["momentum_20"] = df["log_ret"].rolling(20).sum()
+
+        delta = df["close"].diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        rs = gain / loss.replace(0, np.nan)
+        df["rsi_14"] = 100.0 - (100.0 / (1.0 + rs))
 
         cols_to_drop = ["dp"]
         if "market_sell_vol" in df.columns:

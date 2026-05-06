@@ -17,6 +17,10 @@ class EDMDKoopmanModel(KoopmanModel):
         self.is_fitted = False
         self._horizon = 1
 
+    @property
+    def n_min_rows(self) -> int:
+        return self.delay_shifts + 1
+
     def fit(self, X: np.ndarray, Y: np.ndarray, horizon: int = 1) -> None:
         X_train = X[::horizon] if horizon > 1 else X
         self.model.fit(X_train)
@@ -24,18 +28,23 @@ class EDMDKoopmanModel(KoopmanModel):
         self.is_fitted = True
 
     def predict(self, x_trajectory: np.ndarray, steps: int = 1) -> np.ndarray:
+
         if not self.is_fitted:
             raise ValueError("Модель Купмана еще не обучена.")
 
         if x_trajectory.ndim == 1:
             x_trajectory = x_trajectory.reshape(1, -1)
 
+        n_min = self.n_min_rows
+        if len(x_trajectory) < n_min:
+            pad = np.zeros((n_min - len(x_trajectory), x_trajectory.shape[1]))
+            x_trajectory = np.vstack([pad, x_trajectory])
+
         try:
-            trajectory = self.model.simulate(x_trajectory[0], n_steps=steps)
+            trajectory = self.model.simulate(x_trajectory, n_steps=steps)
             return trajectory[-1]
         except Exception:
-            flat_x = x_trajectory.flatten()
-            trajectory = self.model.simulate(flat_x, n_steps=steps)
+            trajectory = self.model.simulate(x_trajectory[-n_min:], n_steps=steps)
             return trajectory[-1]
 
     def get_eigenvalues(self) -> np.ndarray:

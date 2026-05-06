@@ -1,8 +1,8 @@
 import itertools
 import logging
 import warnings
-from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -24,16 +24,17 @@ class TrialResult:
 
 class AlphaOptimizer:
     REQUIRED_KEYS = {"tda_window", "tda_percentile", "z_threshold"}
-    OPTIONAL_KEYS = {"z_quantile"}
+    OPTIONAL_KEYS = {"z_quantile", "horizon", "min_hold_bars", "direction_mode", "rsi_oversold", "rsi_overbought", "htf_k"}
 
     def __init__(
-            self,
-            param_grid: Dict[str, List[Any]],
-            train_window: int = 1000,
-            test_window: int = 100,
-            commission: float = 0.0002,
-            slippage: float = 0.0001,
-            verbose: bool = True,
+        self,
+        param_grid: Dict[str, List[Any]],
+        train_window: int = 1000,
+        test_window: int = 100,
+        commission: float = 0.0002,
+        slippage: float = 0.0001,
+        risk_manager=None,
+        verbose: bool = True,
     ):
         missing = self.REQUIRED_KEYS - set(param_grid.keys())
         if missing:
@@ -44,6 +45,7 @@ class AlphaOptimizer:
         self.test_window = test_window
         self.commission = commission
         self.slippage = slippage
+        self.risk_manager = risk_manager
         self.verbose = verbose
         self._results: List[TrialResult] = []
 
@@ -51,7 +53,6 @@ class AlphaOptimizer:
         self._results.clear()
         combinations = list(self._generate_combinations())
         total = len(combinations)
-
         logger.info("AlphaOptimizer: старт. Всего комбинаций: %d", total)
 
         for idx, params in enumerate(combinations, start=1):
@@ -98,19 +99,17 @@ class AlphaOptimizer:
                 slippage=self.slippage,
             )
 
-            def alpha_logic(train_df: pd.DataFrame, test_df: pd.DataFrame):
+            def alpha_logic(train_df, test_df):
                 return engine.generate_signals(train_df, test_df)
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                oos_df = evaluator.walk_forward_eval(data, alpha_logic)
+                oos_df = evaluator.walk_forward_eval(
+                    data, alpha_logic, risk_manager=self.risk_manager
+                )
 
             summary = WalkForwardEvaluator.get_summary(oos_df)
-            n_trades = (
-                int(oos_df["trade_happened"].sum())
-                if "trade_happened" in oos_df.columns
-                else 0
-            )
+            n_trades = int(oos_df["trade_happened"].sum()) if "trade_happened" in oos_df.columns else 0
 
             return TrialResult(
                 params=params,
@@ -123,42 +122,31 @@ class AlphaOptimizer:
         except Exception as exc:
             logger.warning("Ошибка при params=%s: %s", params, exc, exc_info=True)
             return TrialResult(
-                params=params,
-                sharpe=-999.0,
-                total_return=0.0,
-                max_drawdown=0.0,
-                n_trades=0,
-                error=str(exc),
+                params=params, sharpe=-999.0,
+                total_return=0.0, max_drawdown=0.0,
+                n_trades=0, error=str(exc),
             )
 
     def _to_dataframe(self) -> pd.DataFrame:
         rows = []
         for r in self._results:
-            row = {
-                **r.params,
-                "sharpe": r.sharpe,
-                "total_return": r.total_return,
-                "max_drawdown": r.max_drawdown,
-                "n_trades": r.n_trades,
-            }
+            row = {**r.params, "sharpe": r.sharpe, "total_return": r.total_return,
+                   "max_drawdown": r.max_drawdown, "n_trades": r.n_trades}
             if r.error:
                 row["error"] = r.error
             rows.append(row)
 
         df = pd.DataFrame(rows)
-
         if "error" in df.columns:
             df_ok = df[df["error"] == ""]
             df_err = df[df["error"] != ""]
         else:
-            df_ok = df
-            df_err = pd.DataFrame()
+            df_ok, df_err = df, pd.DataFrame()
 
-        df_sorted = pd.concat(
+        return pd.concat(
             [df_ok.sort_values("sharpe", ascending=False), df_err],
             ignore_index=True,
         )
-        return df_sorted
 
     def best_params(self, top_n: int = 1) -> List[Dict[str, Any]]:
         df = self._to_dataframe()
